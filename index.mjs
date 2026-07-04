@@ -78217,7 +78217,7 @@ var app_default = app;
 // Render combined deployment: serve the built Expo web app from the same origin
 // as the API/socket server, so Socket.io can connect at /api/socket.io.
 const __crabblePath = require("node:path");
-const __crabbleStaticDir = __crabblePath.join(__dirname, "../mobile-web");
+const __crabbleStaticDir = __crabblePath.join(__dirname, "mobile-web");
 app_default.use(import_express7.default.static(__crabbleStaticDir));
 app_default.use((req, res, next) => {
   if (req.path.startsWith("/api")) return next();

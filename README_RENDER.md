@@ -1,17 +1,14 @@
-# Crabble Render-ready deploy
+# Crabble Render deploy
 
-This package serves both:
-- the built Expo mobile web app from `/`
-- the API/socket server from `/api` and `/api/socket.io`
+Upload the contents of this folder to the root of your GitHub repository.
 
 Render settings:
-- Service type: Web Service
 - Runtime: Node
-- Build command: `npm install`
-- Start command: `npm start`
-- Health check path: `/api/healthz`
+- Build Command: npm install
+- Start Command: npm start
+- Health Check Path: /api/healthz
 - Environment variables:
-  - `NODE_ENV=production`
-  - `DATABASE_URL=<your Render Postgres External Database URL>`
+  - NODE_ENV=production
+  - DATABASE_URL=<Render Postgres internal database URL>
 
-Render supplies the `PORT` environment variable automatically.
+Do not add PORT manually; Render provides it.
