@@ -78497,6 +78497,35 @@ function applyAction(state, action) {
         ]
       };
     }
+    case "dumpTile": {
+      const player = state.players.find((p) => p.id === action.playerId);
+      if (!player) return state;
+      if (state.pool.length === 0) return state;
+      const dumpedTile = player.hand.find((t) => t.id === action.tileId);
+      if (!dumpedTile) return state;
+      const drawCount = Math.min(2, state.pool.length);
+      const { drawn, remaining } = draw(state.pool, drawCount);
+      const players = state.players.map(
+        (p) => p.id === action.playerId ? {
+          ...p,
+          hand: [...p.hand.filter((t) => t.id !== action.tileId), ...drawn],
+          totalTilesDrawn: p.totalTilesDrawn + drawn.length
+        } : p
+      );
+      return {
+        ...state,
+        pool: [...remaining, dumpedTile],
+        players,
+        logs: [
+          {
+            id: uuid5(),
+            message: `${player.name} dumped ${dumpedTile.letter} and drew ${drawn.length} tile${drawn.length !== 1 ? "s" : ""}.`,
+            timestamp: now()
+          },
+          ...state.logs
+        ]
+      };
+    }
     case "assignBlankLetter": {
       const actor = state.players.find((p) => p.id === action.actorId);
       if (!actor) return state;
@@ -78833,6 +78862,8 @@ function injectActorId(action, actorId) {
     case "callGo":
       return { ...action, playerId: actorId };
     case "useLife":
+      return { ...action, playerId: actorId };
+    case "dumpTile":
       return { ...action, playerId: actorId };
     case "challengeWord":
       return { ...action, challengerId: actorId };
