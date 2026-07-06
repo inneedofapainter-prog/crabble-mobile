@@ -26,3 +26,10 @@ Use the same Render settings as the last working package:
 - Environment variables:
   - `NODE_ENV=production`
   - `DATABASE_URL=<your Render Postgres internal URL>`
+
+
+## Dump Tile rule update
+
+- Dump Tile is now restricted to genuine stuck states only.
+- The button unlocks only when no valid word can be formed using at least one tile from the player's rack plus letters already on that player's board.
+- The multiplayer server enforces the same rule, so the browser cannot bypass it.
