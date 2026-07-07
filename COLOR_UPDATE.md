@@ -1,7 +1,9 @@
 # Colour Update
 
-Updated the main Crabble header/accent colour from the brighter red `#ef4444` to a softer friendly rose-coral `#dc6f75`.
+Updated the main Crabble header/accent colour to electric blue `#006CFF`.
 
-The validation/error red remains unchanged so invalid words and warning states are still clear.
+Included previous gameplay fixes:
+- Dump Tile is only available when no valid word can be formed from the player's rack plus board letters.
+- GO is blocked unless all board tiles are connected and all words are valid.
 
-Deploy this package the same way as the previous Render-ready ZIP: copy the contents into the GitHub repo root, overwrite existing files, commit to `main`, then let Render redeploy.
+Error/invalid-word styling remains red so mistakes are still clear.
