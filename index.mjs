@@ -79129,6 +79129,13 @@ function markRoomPlayersStatus(io2, room, status) {
 function isChallengeable(status) {
   return status === "available" || status === "solo";
 }
+function canSendChallengeFrom(challenger) {
+  if (isChallengeable(challenger.status)) return true;
+  if (challenger.status !== "in-room" || !challenger.roomCode) return false;
+  const room = getRoom(challenger.roomCode);
+  if (!room || room.gameState.status !== "lobby") return false;
+  return room.players.filter((p) => !p.disconnectedAt).length < 6;
+}
 function clearPublicLobbySocket(io2, socketId) {
   const leaving = lobbyPresence.get(socketId);
   lobbyPresence.delete(socketId);
@@ -79185,8 +79192,8 @@ function setupSocketServer(httpServer2) {
         socket.emit("game:error", { message: "You cannot challenge yourself." });
         return;
       }
-      if (!isChallengeable(challenger.status) || !isChallengeable(target.status)) {
-        socket.emit("game:error", { message: "That player is already in a room or online game." });
+      if (!canSendChallengeFrom(challenger) || !isChallengeable(target.status)) {
+        socket.emit("game:error", { message: "That player is already in a game or the room is full." });
         return;
       }
       const challengeId = crypto.randomUUID();
@@ -79196,7 +79203,8 @@ function setupSocketServer(httpServer2) {
         toSocketId: target.socketId,
         fromName: challenger.name,
         toName: target.name,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        roomCode: challenger.status === "in-room" ? challenger.roomCode : void 0
       });
       socket.emit("lobby:challenge:sent", { challengeId, targetPlayerName: target.name });
       io2.to(target.socketId).emit("lobby:challenge:received", {
@@ -79233,6 +79241,28 @@ function setupSocketServer(httpServer2) {
         return;
       }
       const targetName = (playerName?.trim() || target.name || challenge.toName).slice(0, 20);
+      if (challenge.roomCode) {
+        const existingRoom = getRoom(challenge.roomCode);
+        if (!existingRoom || existingRoom.gameState.status !== "lobby") {
+          socket.emit("game:error", { message: "That room is no longer accepting players." });
+          return;
+        }
+        const joinResult2 = joinRoom(socket.id, existingRoom.code, targetName);
+        if ("error" in joinResult2) {
+          socket.emit("game:error", { message: joinResult2.error });
+          return;
+        }
+        socket.join(existingRoom.code);
+        socket.emit("room:joined", {
+          roomCode: existingRoom.code,
+          playerId: joinResult2.playerId,
+          state: filterStateForPlayer(existingRoom.gameState, joinResult2.playerId)
+        });
+        broadcastRoomUpdate(io2, existingRoom);
+        markRoomPlayersStatus(io2, existingRoom, "in-room");
+        logger.info({ roomCode: existingRoom.code, challenger: challenger.name, target: targetName }, "Challenge accepted; player added to existing room");
+        return;
+      }
       const { room, playerId: hostPlayerId } = createRoom(challenge.fromSocketId, challenger.name);
       challengerSocket.join(room.code);
       challengerSocket.emit("room:created", {
@@ -79260,6 +79290,7 @@ function setupSocketServer(httpServer2) {
         socket.emit("game:error", { message: "Player name is required." });
         return;
       }
+      enterPublicLobby(io2, socket.id, playerName.trim());
       const { room, playerId } = createRoom(socket.id, playerName.trim());
       socket.join(room.code);
       const filtered = filterStateForPlayer(room.gameState, playerId);
@@ -79272,6 +79303,7 @@ function setupSocketServer(httpServer2) {
         socket.emit("game:error", { message: "Player name is required." });
         return;
       }
+      if (playerName?.trim()) enterPublicLobby(io2, socket.id, playerName.trim());
       const result = joinRoom(socket.id, roomCode, playerName?.trim() ?? "", existingPlayerId);
       if ("error" in result) {
         socket.emit("game:error", { message: result.error });

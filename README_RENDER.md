@@ -20,3 +20,6 @@ Dump Tile is now a last-resort move. It only unlocks when the player cannot form
 ## Share App update
 
 This package includes a `📤 Share App` button in the in-game dropdown menu. It shares the app link only, with no room code.
+
+## Profile / Leaderboard / 3+ Player Update
+This package includes the profile-lobby update. The host can create an online room and invite available or solo players from the lobby before starting, making 3+ player games easier to start.

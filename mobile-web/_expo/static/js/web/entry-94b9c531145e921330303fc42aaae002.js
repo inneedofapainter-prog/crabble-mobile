@@ -73597,7 +73597,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       socketStatus
     } = (0, _contextOnlineGameContext.useOnlineRoom)();
     const colors = (0, _hooksUseColors.useColors)();
-    const [name, setName] = (0, _react.useState)("Player");
+    const [name, setName] = (0, _react.useState)(() => { try { return globalThis.localStorage?.getItem("crabble_profile_name") || "Player"; } catch { return "Player"; } });
     (0, _react.useEffect)(() => {
       if (socketStatus === "connected" && name.trim()) {
         enterLobby(name.trim(), "available");
@@ -73649,7 +73649,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
           style: [styles.label, {
             color: colors.foreground
           }],
-          children: "Your Name"
+          children: "Player Profile"
         }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(TextInput.default, {
           style: [styles.input, {
             borderColor: colors.border,
@@ -73657,7 +73657,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             backgroundColor: colors.background
           }],
           value: name,
-          onChangeText: setName,
+          onChangeText: text => { setName(text); try { if (text.trim()) globalThis.localStorage?.setItem("crabble_profile_name", text.trim().slice(0,20)); } catch {} },
           placeholder: "Player",
           placeholderTextColor: colors.mutedForeground,
           maxLength: 20,
@@ -73721,7 +73721,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     const { pendingJoinCode, setPendingJoinCode } = (0, _contextAppMode.useAppMode)();
     const colors = (0, _hooksUseColors.useColors)();
     const [tab, setTab] = (0, _react.useState)("lobby");
-    const [playerName, setPlayerName] = (0, _react.useState)("");
+    const [playerName, setPlayerName] = (0, _react.useState)(() => { try { return globalThis.localStorage?.getItem("crabble_profile_name") || ""; } catch { return ""; } });
     const [joinCode, setJoinCode] = (0, _react.useState)("");
     const isInRoom = roomCode !== null;
     const connected = socketStatus === "connected";
@@ -73763,6 +73763,19 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             i === 0 ? h(Text.default, { style: [styles.hostTag, { color: colors.primary, backgroundColor: colors.primary + "15" }] }, "Host") : null
           ))
         ),
+        isHost ? h(View.default, { style: { gap: 8 } },
+          h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Add Players From Lobby"),
+          publicPlayers.filter(p => p.id !== myLobbyPlayerId && (p.status === "available" || p.status === "solo")).length === 0 ?
+            h(View.default, { style: [styles.emptyPlayers, { borderColor: colors.border }] }, h(Text.default, { style: [styles.emptyPlayersText, { color: colors.mutedForeground }] }, "No available players right now. Share the room link instead.")) :
+            publicPlayers.filter(p => p.id !== myLobbyPlayerId && (p.status === "available" || p.status === "solo")).map(p => h(View.default, { key: p.id, style: [styles.playerRow, { backgroundColor: colors.background, borderColor: colors.border }] },
+              h(View.default, { style: [styles.playerBadge, { backgroundColor: p.status === "available" ? colors.accent : colors.mutedForeground, borderColor: colors.foreground }] }, h(Text.default, { style: styles.playerBadgeText }, p.name.slice(0, 1).toUpperCase())),
+              h(View.default, { style: { flex: 1 } },
+                h(Text.default, { style: [styles.playerName, { color: colors.foreground }] }, p.name),
+                h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `${p.status === "solo" ? "Playing solo" : "Available"} · ${p.wins ?? 0}W-${p.losses ?? 0}L · streak ${p.currentStreak ?? 0}`)
+              ),
+              h(TouchableOpacity.default, { style: [styles.challengeBtn, { backgroundColor: colors.primary, borderColor: colors.border }], onPress: () => challengePlayer(p.id, playerName.trim() || "Player"), activeOpacity: 0.8 }, h(Text.default, { style: [styles.challengeBtnText, { color: colors.primaryForeground }] }, "Invite"))
+            ))
+        ) : null,
         isHost ? h(TouchableOpacity.default, { style: [styles.startBtn, { backgroundColor: colors.primary, borderColor: colors.border, opacity: state.players.length < 1 ? 0.5 : 1 }], onPress: startOnlineGame, disabled: state.players.length < 1, activeOpacity: 0.8 }, h(Text.default, { style: [styles.startBtnText, { color: colors.primaryForeground }] }, "Start Game")) :
           h(View.default, { style: [styles.waitingBox, { backgroundColor: colors.primary + "10" }] }, h(Text.default, { style: [styles.waitingText, { color: colors.mutedForeground }] }, "● Waiting for host to start the game…")),
         h(TouchableOpacity.default, { onPress: leaveRoom, activeOpacity: 0.7, style: styles.leaveBtn }, h(Text.default, { style: [styles.leaveText, { color: colors.mutedForeground }] }, "Leave room"))
@@ -73772,9 +73785,9 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     const lobbyContent = tab === "lobby" ? h(View.default, { style: { gap: 12 } },
       h(View.default, { style: [styles.onlineSummary, { backgroundColor: colors.primary + "10", borderColor: colors.primary }] },
         h(Text.default, { style: [styles.onlineSummaryText, { color: colors.foreground }] }, connected ? `🟢 ${onlineCount} player${onlineCount === 1 ? "" : "s"} online` : "Connecting to lobby…"),
-        h(Text.default, { style: [styles.onlineSummarySub, { color: colors.mutedForeground }] }, "Challenge someone directly — even players currently in solo mode can accept.")
+        h(Text.default, { style: [styles.onlineSummarySub, { color: colors.mutedForeground }] }, "Challenge players, invite solo players, or build a 3–6 player room before starting.")
       ),
-      !playerName.trim() ? h(View.default, { style: [styles.statusBox, { backgroundColor: colors.muted }] }, h(Text.default, { style: [styles.statusText, { color: colors.mutedForeground }] }, "Enter your name to appear in the public lobby.")) : null,
+      !playerName.trim() ? h(View.default, { style: [styles.statusBox, { backgroundColor: colors.muted }] }, h(Text.default, { style: [styles.statusText, { color: colors.mutedForeground }] }, "Enter your profile name to appear in the public lobby.")) : null,
       incomingChallenge ? h(View.default, { style: [styles.challengeBox, { borderColor: colors.primary, backgroundColor: colors.primary + "10" }] },
         h(Text.default, { style: [styles.challengeTitle, { color: colors.foreground }] }, `⚔️ ${incomingChallenge.fromPlayerName} challenged you`),
         h(View.default, { style: styles.challengeActions },
@@ -73784,19 +73797,19 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       ) : null,
       sentChallenge ? h(View.default, { style: [styles.waitingBox, { backgroundColor: colors.primary + "10" }] }, h(Text.default, { style: [styles.waitingText, { color: colors.mutedForeground }] }, `Challenge sent to ${sentChallenge.targetPlayerName}. Waiting for reply…`)) : null,
       h(View.default, { style: { gap: 8 } },
-        h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Leaderboard"),
+        h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Top Players"),
         leaderboard.length === 0 ?
           h(View.default, { style: [styles.emptyPlayers, { borderColor: colors.border }] }, h(Text.default, { style: [styles.emptyPlayersText, { color: colors.mutedForeground }] }, "No online wins yet.")) :
-          leaderboard.map((entry, index) => h(View.default, { key: `${entry.name}-${index}`, style: [styles.leaderRow, { backgroundColor: colors.background, borderColor: colors.border }] },
+          leaderboard.slice(0, 5).map((entry, index) => h(View.default, { key: `${entry.name}-${index}`, style: [styles.leaderRow, { backgroundColor: colors.background, borderColor: colors.border }] },
             h(View.default, { style: [styles.leaderRank, { backgroundColor: index === 0 ? colors.primary : colors.mutedForeground, borderColor: colors.foreground }] }, h(Text.default, { style: styles.leaderRankText }, index + 1)),
             h(View.default, { style: { flex: 1 } },
               h(Text.default, { style: [styles.leaderName, { color: colors.foreground }] }, entry.name),
-              h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `${entry.gamesPlayed ?? ((entry.wins ?? 0) + (entry.losses ?? 0))} played · ${(entry.losses ?? 0)} loss${(entry.losses ?? 0) === 1 ? "" : "es"} · streak ${entry.currentStreak ?? 0}`)
+              h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `${entry.gamesPlayed ?? ((entry.wins ?? 0) + (entry.losses ?? 0))} games · best streak ${entry.bestStreak ?? 0} · current ${entry.currentStreak ?? 0}`)
             ),
-            h(Text.default, { style: [styles.leaderWins, { color: colors.primary }] }, `${entry.wins}W / ${entry.losses ?? 0}L`)
+            h(Text.default, { style: [styles.leaderWins, { color: colors.primary }] }, `${entry.wins}W-${entry.losses ?? 0}L`)
           ))
       ),
-      h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Online Players"),
+      h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Find Match"),
       h(View.default, { style: { gap: 8 } }, publicPlayers.length === 0 ?
         h(View.default, { style: [styles.emptyPlayers, { borderColor: colors.border }] }, h(Text.default, { style: [styles.emptyPlayersText, { color: colors.mutedForeground }] }, "No one is in the public lobby yet.")) :
         publicPlayers.map(p => {
@@ -73806,7 +73819,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             h(View.default, { style: [styles.playerBadge, { backgroundColor: p.status === "available" ? colors.accent : colors.mutedForeground, borderColor: colors.foreground }] }, h(Text.default, { style: styles.playerBadgeText }, p.name.slice(0, 1).toUpperCase())),
             h(View.default, { style: { flex: 1 } },
               h(Text.default, { style: [styles.playerName, { color: colors.foreground }] }, `${p.name}${isYou ? " (You)" : ""}`),
-              h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `${p.status === "available" ? "Available" : p.status === "solo" ? "Playing solo" : p.status === "playing" ? "In online game" : "In room"} · ${p.wins ?? 0}W/${p.losses ?? 0}L · streak ${p.currentStreak ?? 0}`)
+              h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `${p.status === "available" ? "Available" : p.status === "solo" ? "Playing solo" : p.status === "playing" ? "In online game" : "In room"} · ${p.wins ?? 0}W-${p.losses ?? 0}L`)
             ),
             h(TouchableOpacity.default, { style: [styles.challengeBtn, { backgroundColor: colors.primary, borderColor: colors.border, opacity: canChallenge ? 1 : 0.45 }], onPress: () => challengePlayer(p.id, playerName.trim()), disabled: !canChallenge, activeOpacity: 0.8 }, h(Text.default, { style: [styles.challengeBtnText, { color: colors.primaryForeground }] }, "Challenge"))
           );
@@ -73825,7 +73838,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         );
       })),
       h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Your Name"),
-      h(TextInput.default, { style: [styles.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }], value: playerName, onChangeText: text => { setPlayerName(text); clearChallengeStatus(); }, placeholder: "Enter your name", placeholderTextColor: colors.mutedForeground, maxLength: 20, returnKeyType: tab === "join" ? "next" : "done" }),
+      h(TextInput.default, { style: [styles.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }], value: playerName, onChangeText: text => { setPlayerName(text); try { if (text.trim()) globalThis.localStorage?.setItem("crabble_profile_name", text.trim().slice(0,20)); } catch {} clearChallengeStatus(); }, placeholder: "Enter your player name", placeholderTextColor: colors.mutedForeground, maxLength: 20, returnKeyType: tab === "join" ? "next" : "done" }),
       lobbyContent,
       tab === "join" ? h(View.default, null,
         h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Room Code"),
