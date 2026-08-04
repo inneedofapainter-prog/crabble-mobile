@@ -73079,9 +73079,23 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
   var _anArrayOfEnglishWords = require(_dependencyMap[0]);
   var wordArray = _interopDefault(_anArrayOfEnglishWords);
   const wordSet = new Set(wordArray.default);
+  const BANNED_ABBREVIATED_OR_SLANG_WORDS = new Set(["admin","admins","app","apps","asap","atm","bbl","bff","brb","btw","dm","dms","faq","faqs","fb","fomo","fwiw","fyi","gg","gl","hf","idc","idk","ikr","imho","imo","irl","jk","lmao","lmfao","lol","lolz","np","nvm","omg","omw","pm","pms","rofl","smh","tbh","thx","tia","tmi","ttyl","wbu","wyd","yw","yolo","bae","bestie","besties","bro","bros","bruh","bruv","cheugy","chillax","cuz","cus","dawg","dude","dudes","fam","finna","gonna","gotta","gurl","haha","hehe","hypebeast","innit","kinda","noob","newb","newbie","noobs","newbs","noobies","ok","okayyy","omfg","pog","pwn","pwned","pwns","selfie","selfies","simp","simps","sus","tho","vibe","vibes","wanna","wassup","whatevs","yass","yas","yeet","yeets","yeeted","yeeting","yikes","addy","adverts","advert","biz","bio","bios","convo","convos","cred","creds","deets","demo","demos","exam","exams","fridge","info","intro","intros","lab","labs","memo","memos","mic","mics","pic","pics","promo","promos","sec","secs","spec","specs","stats","sub","subs","tix","vid","vids","vlog","vlogs","webcam","webcams","wifi","wiki","wikis"]);
+  function isBannedAbbreviationOrSlang(word) {
+    const lower = word.toLowerCase();
+    if (BANNED_ABBREVIATED_OR_SLANG_WORDS.has(lower)) return true;
+    const endings = ["s", "es", "ed", "ing"];
+    for (const ending of endings) {
+      if (lower.length > ending.length + 2) {
+        const base = lower.slice(0, -ending.length);
+        if (BANNED_ABBREVIATED_OR_SLANG_WORDS.has(base)) return true;
+      }
+    }
+    return false;
+  }
   const VALID_TWO_LETTER_WORDS = new Set(["aa", "ab", "ad", "ah", "am", "an", "as", "at", "aw", "ax", "ay", "ba", "be", "bi", "bo", "by", "da", "do", "ed", "eh", "el", "em", "en", "er", "es", "et", "ex", "fa", "go", "ha", "he", "hi", "ho", "id", "if", "in", "is", "it", "jo", "ka", "ki", "la", "li", "lo", "ma", "me", "mi", "mo", "mu", "my", "na", "no", "nu", "of", "oh", "oi", "om", "on", "op", "or", "ow", "ox", "oy", "pa", "pe", "pi", "qi", "re", "sh", "si", "so", "ta", "ti", "to", "uh", "um", "un", "up", "us", "we", "wo", "xi", "ya", "ye", "yo", "za"]);
   function isValidWord(word) {
     const lower = word.toLowerCase();
+    if (isBannedAbbreviationOrSlang(lower)) return false;
     if (lower.length === 2) return VALID_TWO_LETTER_WORDS.has(lower);
     return wordSet.has(lower);
   }
@@ -73141,7 +73155,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     if (allLetters.length < 2) return false;
     const all = _crabbleBuildCounts(allLetters);
     const maxLength = allLetters.length;
-    const candidates = [...VALID_TWO_LETTER_WORDS, ...wordArray.default.filter((word) => word.length !== 2)];
+    const candidates = [...VALID_TWO_LETTER_WORDS, ...wordArray.default.filter((word) => word.length !== 2 && !isBannedAbbreviationOrSlang(word))];
     for (const rawWord of candidates) {
       const word = rawWord.toLowerCase();
       if (word.length < 2 || word.length > maxLength) continue;
@@ -73725,6 +73739,20 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     const [joinCode, setJoinCode] = (0, _react.useState)("");
     const isInRoom = roomCode !== null;
     const connected = socketStatus === "connected";
+    const myStats = leaderboard.find(entry => String(entry.name || "").trim().toLowerCase() === playerName.trim().toLowerCase());
+    const zeroStats = { name: playerName || "Player", wins: 0, losses: 0, gamesPlayed: 0, currentStreak: 0, bestStreak: 0, soloWins: 0, soloLosses: 0, soloGamesPlayed: 0, longestWord: "", longestWordLength: 0, onlineLongestWord: "", onlineLongestWordLength: 0, soloLongestWord: "", soloLongestWordLength: 0 };
+    const localSoloStats = (() => { try { return JSON.parse(globalThis.localStorage?.getItem(`crabble_solo_stats_${playerName.trim().toLowerCase()}`) || "{}"); } catch { return {}; } })();
+    const serverStats = myStats || zeroStats;
+    const stats = { ...serverStats,
+      soloWins: Math.max(serverStats.soloWins || 0, localSoloStats.soloWins || 0),
+      soloLosses: Math.max(serverStats.soloLosses || 0, localSoloStats.soloLosses || 0),
+      soloGamesPlayed: Math.max(serverStats.soloGamesPlayed || 0, localSoloStats.soloGamesPlayed || 0),
+      soloLongestWord: (serverStats.soloLongestWord || "").length >= (localSoloStats.soloLongestWord || "").length ? (serverStats.soloLongestWord || "") : (localSoloStats.soloLongestWord || ""),
+      soloLongestWordLength: Math.max(serverStats.soloLongestWordLength || 0, localSoloStats.soloLongestWordLength || 0)
+    };
+    if ((stats.soloLongestWord || "").length > (stats.longestWord || "").length) stats.longestWord = stats.soloLongestWord;
+    const totalWins = (stats.wins || 0) + (stats.soloWins || 0);
+    const totalLosses = (stats.losses || 0) + (stats.soloLosses || 0);
     (0, _react.useEffect)(() => {
       if (pendingJoinCode && !isInRoom) {
         setTab("join");
@@ -73781,7 +73809,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         h(TouchableOpacity.default, { onPress: leaveRoom, activeOpacity: 0.7, style: styles.leaveBtn }, h(Text.default, { style: [styles.leaveText, { color: colors.mutedForeground }] }, "Leave room"))
       );
     }
-    const tabs = ["lobby", "create", "join"];
+    const tabs = ["lobby", "stats", "create", "join"];
     const lobbyContent = tab === "lobby" ? h(View.default, { style: { gap: 12 } },
       h(View.default, { style: [styles.onlineSummary, { backgroundColor: colors.primary + "10", borderColor: colors.primary }] },
         h(Text.default, { style: [styles.onlineSummaryText, { color: colors.foreground }] }, connected ? `🟢 ${onlineCount} player${onlineCount === 1 ? "" : "s"} online` : "Connecting to lobby…"),
@@ -73796,19 +73824,6 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         )
       ) : null,
       sentChallenge ? h(View.default, { style: [styles.waitingBox, { backgroundColor: colors.primary + "10" }] }, h(Text.default, { style: [styles.waitingText, { color: colors.mutedForeground }] }, `Challenge sent to ${sentChallenge.targetPlayerName}. Waiting for reply…`)) : null,
-      h(View.default, { style: { gap: 8 } },
-        h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Top Players"),
-        leaderboard.length === 0 ?
-          h(View.default, { style: [styles.emptyPlayers, { borderColor: colors.border }] }, h(Text.default, { style: [styles.emptyPlayersText, { color: colors.mutedForeground }] }, "No online wins yet.")) :
-          leaderboard.slice(0, 5).map((entry, index) => h(View.default, { key: `${entry.name}-${index}`, style: [styles.leaderRow, { backgroundColor: colors.background, borderColor: colors.border }] },
-            h(View.default, { style: [styles.leaderRank, { backgroundColor: index === 0 ? colors.primary : colors.mutedForeground, borderColor: colors.foreground }] }, h(Text.default, { style: styles.leaderRankText }, index + 1)),
-            h(View.default, { style: { flex: 1 } },
-              h(Text.default, { style: [styles.leaderName, { color: colors.foreground }] }, entry.name),
-              h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `${entry.gamesPlayed ?? ((entry.wins ?? 0) + (entry.losses ?? 0))} games · best streak ${entry.bestStreak ?? 0} · current ${entry.currentStreak ?? 0}`)
-            ),
-            h(Text.default, { style: [styles.leaderWins, { color: colors.primary }] }, `${entry.wins}W-${entry.losses ?? 0}L`)
-          ))
-      ),
       h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Find Match"),
       h(View.default, { style: { gap: 8 } }, publicPlayers.length === 0 ?
         h(View.default, { style: [styles.emptyPlayers, { borderColor: colors.border }] }, h(Text.default, { style: [styles.emptyPlayersText, { color: colors.mutedForeground }] }, "No one is in the public lobby yet.")) :
@@ -73826,6 +73841,33 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         })
       )
     ) : null;
+    const statsContent = tab === "stats" ? h(View.default, { style: { gap: 12 } },
+      h(View.default, { style: [styles.onlineSummary, { backgroundColor: colors.primary + "10", borderColor: colors.primary }] },
+        h(Text.default, { style: [styles.onlineSummaryText, { color: colors.foreground }] }, stats.name || "Your stats"),
+        h(Text.default, { style: [styles.onlineSummarySub, { color: colors.mutedForeground }] }, "Solo and online stats are saved against your profile name.")
+      ),
+      h(View.default, { style: styles.statGrid },
+        h(View.default, { style: [styles.statTile, { backgroundColor: colors.background, borderColor: colors.border }] }, h(Text.default, { style: [styles.statTileLabel, { color: colors.mutedForeground }] }, "Total"), h(Text.default, { style: [styles.statTileValue, { color: colors.foreground }] }, `${totalWins}W-${totalLosses}L`)),
+        h(View.default, { style: [styles.statTile, { backgroundColor: colors.background, borderColor: colors.border }] }, h(Text.default, { style: [styles.statTileLabel, { color: colors.mutedForeground }] }, "Online"), h(Text.default, { style: [styles.statTileValue, { color: colors.foreground }] }, `${stats.wins || 0}W-${stats.losses || 0}L`)),
+        h(View.default, { style: [styles.statTile, { backgroundColor: colors.background, borderColor: colors.border }] }, h(Text.default, { style: [styles.statTileLabel, { color: colors.mutedForeground }] }, "Solo"), h(Text.default, { style: [styles.statTileValue, { color: colors.foreground }] }, `${stats.soloWins || 0}W-${stats.soloLosses || 0}L`)),
+        h(View.default, { style: [styles.statTile, { backgroundColor: colors.background, borderColor: colors.border }] }, h(Text.default, { style: [styles.statTileLabel, { color: colors.mutedForeground }] }, "Best streak"), h(Text.default, { style: [styles.statTileValue, { color: colors.foreground }] }, stats.bestStreak || 0))
+      ),
+      h(View.default, { style: [styles.leaderRow, { backgroundColor: colors.background, borderColor: colors.border }] },
+        h(View.default, { style: { flex: 1 } },
+          h(Text.default, { style: [styles.leaderName, { color: colors.foreground }] }, "Longest word"),
+          h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `Online: ${stats.onlineLongestWord || "—"} · Solo: ${stats.soloLongestWord || "—"}`)
+        ),
+        h(Text.default, { style: [styles.leaderWins, { color: colors.primary }] }, stats.longestWord || "—")
+      ),
+      h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Top 3 Players"),
+      leaderboard.length === 0 ?
+        h(View.default, { style: [styles.emptyPlayers, { borderColor: colors.border }] }, h(Text.default, { style: [styles.emptyPlayersText, { color: colors.mutedForeground }] }, "No online wins yet.")) :
+        leaderboard.slice(0, 3).map((entry, index) => h(View.default, { key: `${entry.name}-${index}`, style: [styles.leaderRow, { backgroundColor: colors.background, borderColor: colors.border }] },
+          h(View.default, { style: [styles.leaderRank, { backgroundColor: index === 0 ? colors.primary : colors.mutedForeground, borderColor: colors.foreground }] }, h(Text.default, { style: styles.leaderRankText }, index + 1)),
+          h(View.default, { style: { flex: 1 } }, h(Text.default, { style: [styles.leaderName, { color: colors.foreground }] }, entry.name), h(Text.default, { style: [styles.playerStatus, { color: colors.mutedForeground }] }, `Best streak ${entry.bestStreak || 0} · Longest ${entry.longestWord || "—"}`)),
+          h(Text.default, { style: [styles.leaderWins, { color: colors.primary }] }, `${entry.wins || 0}W-${entry.losses || 0}L`)
+        ))
+    ) : null;
     return h(View.default, { style: [styles.card, { backgroundColor: colors.card, borderColor: colors.border }] },
       h(Text.default, { style: [styles.lobbyTitle, { color: colors.foreground }] }, "Play Online"),
       h(Text.default, { style: [styles.lobbySub, { color: colors.mutedForeground }] }, "See who is online, challenge a player, or create/join a private room."),
@@ -73834,12 +73876,13 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       h(View.default, { style: [styles.tabRow, { borderColor: colors.foreground }] }, tabs.map(t => {
         const active = tab === t;
         return h(TouchableOpacity.default, { key: t, style: [styles.tabBtn, active && { backgroundColor: colors.foreground }], onPress: () => setTab(t), activeOpacity: 0.8 },
-          h(Text.default, { style: [styles.tabText, { color: active ? colors.background : colors.foreground }] }, t === "lobby" ? "Lobby" : t === "create" ? "Create Room" : "Join Room")
+          h(Text.default, { style: [styles.tabText, { color: active ? colors.background : colors.foreground }] }, t === "lobby" ? "Lobby" : t === "stats" ? "Stats" : t === "create" ? "Create" : "Join")
         );
       })),
       h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Your Name"),
       h(TextInput.default, { style: [styles.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }], value: playerName, onChangeText: text => { setPlayerName(text); try { if (text.trim()) globalThis.localStorage?.setItem("crabble_profile_name", text.trim().slice(0,20)); } catch {} clearChallengeStatus(); }, placeholder: "Enter your player name", placeholderTextColor: colors.mutedForeground, maxLength: 20, returnKeyType: tab === "join" ? "next" : "done" }),
       lobbyContent,
+      statsContent,
       tab === "join" ? h(View.default, null,
         h(Text.default, { style: [styles.label, { color: colors.foreground }] }, "Room Code"),
         h(TextInput.default, { style: [styles.input, styles.codeInput, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }], value: joinCode, onChangeText: t => setJoinCode(t.toUpperCase()), placeholder: "e.g. ABCD-1234", placeholderTextColor: colors.mutedForeground, autoCapitalize: "characters", maxLength: 9 })
@@ -74198,6 +74241,29 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       fontSize: 13,
       fontWeight: "900"
     },
+    statGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8
+    },
+    statTile: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      borderWidth: 2,
+      borderRadius: 12,
+      padding: 12,
+      gap: 4
+    },
+    statTileLabel: {
+      fontSize: 11,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.5
+    },
+    statTileValue: {
+      fontSize: 18,
+      fontWeight: "900"
+    },
     leaveBtn: {
       alignItems: "center",
       paddingVertical: 4
@@ -74547,6 +74613,9 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         setPublicPlayers(players);
         setLeaderboard(leaderboard ?? []);
       });
+      socket.on("stats:updated", ({ leaderboard }) => {
+        setLeaderboard(leaderboard ?? []);
+      });
       socket.on("lobby:challenge:received", challenge => {
         setIncomingChallenge(challenge);
         setSentChallenge(null);
@@ -74669,6 +74738,10 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       setIncomingChallenge(null);
       setSentChallenge(null);
     };
+    const recordSoloResult = (data) => {
+      if (!data.playerName || !data.playerName.trim()) return;
+      socketRef.current?.emit("stats:soloResult", data);
+    };
     (0, _react.useEffect)(() => {
       if (mode !== "offline" || !incomingChallenge) return;
       const message = `${incomingChallenge.fromPlayerName} challenged you to an online game. Accepting will leave your solo game and open a private room.`;
@@ -74783,7 +74856,8 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       challengePlayer,
       acceptChallenge,
       declineChallenge,
-      clearChallengeStatus
+      clearChallengeStatus,
+      recordSoloResult
     };
     return /*#__PURE__*/(0, _reactJsxRuntime.jsx)(OnlineRoomContext.Provider, {
       value: roomCtxValue,
@@ -137337,6 +137411,27 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }, [didCurrentPlayerWin, isGameOver, isMultiplayer]);
+    const soloStatsRecordedRef = React.default.useRef(false);
+    React.default.useEffect(() => {
+      if (isMultiplayer || soloStatsRecordedRef.current || !player?.name) return;
+      if (state.status !== "finished" && state.status !== "gameover") return;
+      const { words } = (0, _workspaceCrabbleCore.extractWords)(state.board);
+      const longestWord = words.map(w => w.word.toUpperCase()).sort((a, b) => b.length - a.length || a.localeCompare(b))[0] || "";
+      try {
+        const key = `crabble_solo_stats_${String(player.name || "Player").trim().toLowerCase()}`;
+        const previous = JSON.parse(globalThis.localStorage?.getItem(key) || "{}");
+        const next = { ...previous };
+        if (state.status === "finished") next.soloWins = (next.soloWins || 0) + 1;
+        else next.soloLosses = (next.soloLosses || 0) + 1;
+        next.soloGamesPlayed = (next.soloGamesPlayed || 0) + 1;
+        if (longestWord.length > (next.soloLongestWordLength || 0)) {
+          next.soloLongestWord = longestWord;
+          next.soloLongestWordLength = longestWord.length;
+        }
+        globalThis.localStorage?.setItem(key, JSON.stringify(next));
+      } catch {}
+      soloStatsRecordedRef.current = true;
+    }, [isMultiplayer, player?.name, state.board, state.status]);
     function handlePlayAgain() {
       Haptics.selectionAsync();
       dispatch({
