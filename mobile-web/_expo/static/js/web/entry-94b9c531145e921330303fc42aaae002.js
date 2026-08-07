@@ -72195,6 +72195,8 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         return (0, _workspaceCrabbleCore.placeTile)(state, action.tileId, action.row, action.col);
       case "LIFT_TILE":
         return (0, _workspaceCrabbleCore.liftTile)(state, action.row, action.col);
+      case "LIFT_TILES":
+        return (0, _workspaceCrabbleCore.liftTiles)(state, action.cells);
       case "CALL_GO":
         return (0, _workspaceCrabbleCore.callGo)(state, action.playerId);
       case "USE_LIFE":
@@ -72205,6 +72207,8 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
         return (0, _workspaceCrabbleCore.assignBlankLetter)(state, action.row, action.col, action.letter);
       case "MOVE_BOARD_TILE":
         return (0, _workspaceCrabbleCore.moveBoardTile)(state, action.fromRow, action.fromCol, action.toRow, action.toCol);
+      case "MOVE_BOARD_TILES":
+        return (0, _workspaceCrabbleCore.moveBoardTiles)(state, action.cells, action.toRow, action.toCol);
       case "RESET":
         return (0, _workspaceCrabbleCore.resetGame)();
       case "PLAY_AGAIN":
@@ -73187,7 +73191,9 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
   exports.startGame = startGame;
   exports.placeTile = placeTile;
   exports.liftTile = liftTile;
+  exports.liftTiles = liftTiles;
   exports.moveBoardTile = moveBoardTile;
+  exports.moveBoardTiles = moveBoardTiles;
   exports.callGo = callGo;
   exports.useLife = useLife;
   exports.dumpTile = dumpTile;
@@ -73307,6 +73313,29 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       players
     });
   }
+  function liftTiles(state, cells) {
+    if (cells.length === 0) return state;
+    const newBoard = Object.assign({}, state.board);
+    const lifted = [];
+    const seen = new Set();
+    for (const cell of cells) {
+      const key = (0, _tiles.cellKey)(cell.row, cell.col);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const tile = newBoard[key];
+      if (!tile) continue;
+      lifted.push(tile);
+      delete newBoard[key];
+    }
+    if (lifted.length === 0) return state;
+    const players = state.players.map((p, i) => i === 0 ? Object.assign({}, p, {
+      hand: [...p.hand, ...lifted]
+    }) : p);
+    return Object.assign({}, state, {
+      board: newBoard,
+      players
+    });
+  }
   function moveBoardTile(state, fromRow, fromCol, toRow, toCol) {
     const fromKey = (0, _tiles.cellKey)(fromRow, fromCol);
     const toKey = (0, _tiles.cellKey)(toRow, toCol);
@@ -73319,6 +73348,39 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     return Object.assign({}, state, {
       board: newBoard
     }, expandBounds(state, toRow, toCol));
+  }
+  function moveBoardTiles(state, cells, toRow, toCol) {
+    if (cells.length === 0) return state;
+    const uniqueCells = Array.from(new Map(cells.map(cell => [(0, _tiles.cellKey)(cell.row, cell.col), cell])).values());
+    const selectedKeys = new Set(uniqueCells.map(cell => (0, _tiles.cellKey)(cell.row, cell.col)));
+    const movingTiles = uniqueCells.map(cell => Object.assign({}, cell, {
+      key: (0, _tiles.cellKey)(cell.row, cell.col),
+      tile: state.board[(0, _tiles.cellKey)(cell.row, cell.col)]
+    }));
+    if (movingTiles.some(item => !item.tile)) return state;
+    const minRow = Math.min(...uniqueCells.map(cell => cell.row));
+    const minCol = Math.min(...uniqueCells.map(cell => cell.col));
+    const rowOffset = toRow - minRow;
+    const colOffset = toCol - minCol;
+    const destinationKeys = new Set();
+    for (const item of movingTiles) {
+      const destKey = (0, _tiles.cellKey)(item.row + rowOffset, item.col + colOffset);
+      if (destinationKeys.has(destKey)) return state;
+      destinationKeys.add(destKey);
+      if (state.board[destKey] && !selectedKeys.has(destKey)) return state;
+    }
+    const newBoard = Object.assign({}, state.board);
+    for (const key of selectedKeys) delete newBoard[key];
+    let nextState = Object.assign({}, state, {
+      board: newBoard
+    });
+    for (const item of movingTiles) {
+      const newRow = item.row + rowOffset;
+      const newCol = item.col + colOffset;
+      nextState.board[(0, _tiles.cellKey)(newRow, newCol)] = item.tile;
+      nextState = Object.assign({}, nextState, expandBounds(nextState, newRow, newCol));
+    }
+    return nextState;
   }
   function callGo(state, playerId) {
     const caller = state.players.find(p => p.id === playerId);
@@ -74779,11 +74841,25 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             col: action.col
           });
           break;
+        case "LIFT_TILES":
+          emitAction({
+            type: "liftTiles",
+            cells: action.cells
+          });
+          break;
         case "MOVE_BOARD_TILE":
           emitAction({
             type: "moveBoardTile",
             fromRow: action.fromRow,
             fromCol: action.fromCol,
+            toRow: action.toRow,
+            toCol: action.toCol
+          });
+          break;
+        case "MOVE_BOARD_TILES":
+          emitAction({
+            type: "moveBoardTiles",
+            cells: action.cells,
             toRow: action.toRow,
             toCol: action.toCol
           });
@@ -79709,6 +79785,13 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     }
     return disconnected;
   }
+  function parseBoardCellKey(key) {
+    const [rowRaw, colRaw] = key.split(",");
+    const row = Number(rowRaw);
+    const col = Number(colRaw);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) return null;
+    return { row, col };
+  }
   function GameScreen() {
     const {
       state,
@@ -79721,6 +79804,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     const bottomPad = 34;
     const [selectedTileId, setSelectedTileId] = (0, _react.useState)(null);
     const [selectedBoardCell, setSelectedBoardCell] = (0, _react.useState)(null);
+    const [selectedBoardCellKeys, setSelectedBoardCellKeys] = (0, _react.useState)(() => new Set());
     const [blankPickerVisible, setBlankPickerVisible] = (0, _react.useState)(false);
     const [pendingBlankPos, setPendingBlankPos] = (0, _react.useState)(null);
     const [blankLetter, setBlankLetter] = (0, _react.useState)("");
@@ -79754,29 +79838,32 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       return (0, _workspaceCrabbleCore.canFormValidWordFromTiles)(hand, state.board);
     }, [hand, state.board]);
     const canDumpTile = !!selectedTileId && state.pool.length > 0 && !validWordStillPossible;
+
+    const selectedBoardCount = selectedBoardCellKeys.size;
+    const selectedBoardCells = (0, _react.useMemo)(() => Array.from(selectedBoardCellKeys).map(parseBoardCellKey).filter(cell => cell !== null), [selectedBoardCellKeys]);
+    function clearBoardSelection() {
+      setSelectedBoardCell(null);
+      setSelectedBoardCellKeys(new Set());
+    }
+    function selectBoardCells(cells) {
+      const next = new Set(cells.map(cell => (0, _workspaceCrabbleCore.cellKey)(cell.row, cell.col)));
+      setSelectedBoardCellKeys(next);
+      setSelectedBoardCell(cells[cells.length - 1] ?? null);
+    }
     function handleTileSelect(tileId) {
       Haptics.selectionAsync();
-      setSelectedBoardCell(null);
+      clearBoardSelection();
       setSelectedTileId(prev => prev === tileId ? null : tileId);
     }
     function handleCellPress(row, col) {
-      if (selectedBoardCell) {
-        const {
-          row: fromRow,
-          col: fromCol
-        } = selectedBoardCell;
-        if (fromRow === row && fromCol === col) {
-          setSelectedBoardCell(null);
-          return;
-        }
+      if (selectedBoardCount > 0) {
         dispatch({
-          type: "MOVE_BOARD_TILE",
-          fromRow,
-          fromCol,
+          type: "MOVE_BOARD_TILES",
+          cells: selectedBoardCells,
           toRow: row,
           toCol: col
         });
-        setSelectedBoardCell(null);
+        clearBoardSelection();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         return;
       }
@@ -79809,25 +79896,52 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     function handleBoardTilePress(row, col) {
-      if (selectedBoardCell?.row === row && selectedBoardCell?.col === col) {
-        setSelectedBoardCell(null);
-        return;
-      }
+      const key = (0, _workspaceCrabbleCore.cellKey)(row, col);
       setSelectedTileId(null);
-      setSelectedBoardCell({
-        row,
-        col
+      setSelectedBoardCellKeys(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        const nextKeys = Array.from(next);
+        const nextAnchor = next.has(key) ? { row, col } : parseBoardCellKey(nextKeys[nextKeys.length - 1] ?? "");
+        setSelectedBoardCell(nextAnchor);
+        return next;
       });
       Haptics.selectionAsync();
     }
-    function handleRecall() {
+    function handleSelectWord() {
       if (!selectedBoardCell) return;
+      const selectedKey = (0, _workspaceCrabbleCore.cellKey)(selectedBoardCell.row, selectedBoardCell.col);
+      const wordCells = [];
+      const seen = new Set();
+      for (const word of words) {
+        const containsSelected = word.cells.some(cell => (0, _workspaceCrabbleCore.cellKey)(cell.row, cell.col) === selectedKey);
+        if (!containsSelected) continue;
+        for (const cell of word.cells) {
+          const key = (0, _workspaceCrabbleCore.cellKey)(cell.row, cell.col);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          wordCells.push(cell);
+        }
+      }
+      if (wordCells.length === 0) return;
+      selectBoardCells(wordCells);
+      Haptics.selectionAsync();
+    }
+    function handleClearSelection() {
+      clearBoardSelection();
+      Haptics.selectionAsync();
+    }
+    function handleRecall() {
+      if (selectedBoardCount === 0) return;
       dispatch({
-        type: "LIFT_TILE",
-        row: selectedBoardCell.row,
-        col: selectedBoardCell.col
+        type: "LIFT_TILES",
+        cells: selectedBoardCells
       });
-      setSelectedBoardCell(null);
+      clearBoardSelection();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     function handleGo() {
@@ -79968,6 +80082,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
           invalidCellKeys: invalidCellKeys,
           selectedTileId: selectedTileId,
           selectedBoardCell: selectedBoardCell,
+          selectedBoardCellKeys: selectedBoardCellKeys,
           onCellPress: handleCellPress,
           onBoardTilePress: handleBoardTilePress
         })
@@ -79977,7 +80092,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
           backgroundColor: colors.card,
           borderTopColor: colors.border
         }],
-        children: [selectedBoardCell && /*#__PURE__*/(0, _reactJsxRuntime.jsxs)(View.default, {
+        children: [selectedBoardCount > 0 && /*#__PURE__*/(0, _reactJsxRuntime.jsxs)(View.default, {
           style: styles.recallRow,
           children: [/*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
             style: [styles.hint, styles.hintFlex, {
@@ -79987,7 +80102,33 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
               style: [styles.hintText, {
                 color: colors.primary
               }],
-              children: "Tap a cell to move, or recall to rack"
+              children: selectedBoardCount > 1 ? `${selectedBoardCount} tiles selected. Tap an empty cell to move them together.` : "Tap more letters to add, or tap an empty cell to move."
+            })
+          }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(TouchableOpacity.default, {
+            style: [styles.recallBtn, {
+              backgroundColor: colors.primary + "15",
+              borderColor: colors.primary
+            }],
+            onPress: handleSelectWord,
+            activeOpacity: 0.8,
+            children: /*#__PURE__*/(0, _reactJsxRuntime.jsx)(Text.default, {
+              style: [styles.recallBtnText, {
+                color: colors.primary
+              }],
+              children: "Word"
+            })
+          }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(TouchableOpacity.default, {
+            style: [styles.recallBtn, {
+              backgroundColor: colors.muted,
+              borderColor: colors.border
+            }],
+            onPress: handleClearSelection,
+            activeOpacity: 0.8,
+            children: /*#__PURE__*/(0, _reactJsxRuntime.jsx)(Text.default, {
+              style: [styles.recallBtnText, {
+                color: colors.foreground
+              }],
+              children: "Clear"
             })
           }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(TouchableOpacity.default, {
             style: [styles.recallBtn, {
@@ -79996,12 +80137,12 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             }],
             onPress: handleRecall,
             activeOpacity: 0.8,
-            children: /*#__PURE__*/(0, _reactJsxRuntime.jsx)(Text.default, {
+            children: /*#__PURE__*/(0, _reactJsxRuntime.jsxs)(Text.default, {
               style: styles.recallBtnText,
-              children: "\u21A9 Recall"
+              children: ["\u21A9 ", selectedBoardCount > 1 ? "Recall All" : "Recall"]
             })
           })]
-        }), selectedTileId && !selectedBoardCell && /*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
+        }), selectedTileId && selectedBoardCount === 0 && /*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
           style: [styles.hint, {
             backgroundColor: colors.primary + "15"
           }],
@@ -80011,7 +80152,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             }],
             children: validWordStillPossible ? "Tap a board cell to place it. Dump unlocks only when no valid word can be formed." : "Tap a board cell to place it, or dump it for 2 new tiles"
           })
-        }), !selectedTileId && !selectedBoardCell && !canCallGo && /*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
+        }), !selectedTileId && selectedBoardCount === 0 && !canCallGo && /*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
           style: [styles.hint, {
             backgroundColor: colors.muted
           }],
@@ -80021,7 +80162,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
             }],
             children: "GO locked: all tiles must make valid connected words before you can press GO. Dump unlocks only when no valid word can be formed."
           })
-        }), !selectedTileId && !selectedBoardCell && (handEmpty || qStuck) && invalidCellKeys.size > 0 && /*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
+        }), !selectedTileId && selectedBoardCount === 0 && (handEmpty || qStuck) && invalidCellKeys.size > 0 && /*#__PURE__*/(0, _reactJsxRuntime.jsx)(View.default, {
           style: [styles.hint, {
             backgroundColor: "#ef444415"
           }],
@@ -80218,12 +80359,17 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
               style: [styles.howToText, {
                 color: colors.foreground
               }],
-              children: "4. Dump Tile only unlocks when no valid word can be formed from your rack plus the board."
+              children: "4. Tap board letters to highlight multiple tiles or a whole word, then tap an empty square to move them together."
             }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(Text.default, {
               style: [styles.howToText, {
                 color: colors.foreground
               }],
-              children: "5. When your rack is empty and every board tile is in one connected valid group, tap GO!"
+              children: "5. Dump Tile only unlocks when no valid word can be formed from your rack plus the board."
+            }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(Text.default, {
+              style: [styles.howToText, {
+                color: colors.foreground
+              }],
+              children: "6. When your rack is empty and every board tile is in one connected valid group, tap GO!"
             }), /*#__PURE__*/(0, _reactJsxRuntime.jsx)(TouchableOpacity.default, {
               style: [styles.modalBtn, {
                 backgroundColor: colors.primary
@@ -80380,11 +80526,12 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     recallRow: {
       flexDirection: "row",
       alignItems: "center",
+      flexWrap: "wrap",
       gap: 8
     },
     recallBtn: {
       borderRadius: 8,
-      paddingHorizontal: 14,
+      paddingHorizontal: 10,
       paddingVertical: 7,
       borderWidth: 2
     },
@@ -80971,6 +81118,7 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
     invalidCellKeys,
     selectedTileId,
     selectedBoardCell,
+    selectedBoardCellKeys,
     onCellPress,
     onBoardTilePress
   }) {
@@ -81304,15 +81452,15 @@ __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, expor
                     const tile = board[key];
                     const isInvalid = invalidCellKeys.has(key);
                     const cellBg = getCellColor(row, col);
-                    const isBoardSelected = selectedBoardCell?.row === row && selectedBoardCell?.col === col;
-                    const isDropTarget = !tile && (selectedTileId != null || selectedBoardCell != null);
+                    const isBoardSelected = selectedBoardCellKeys.has(key) || (selectedBoardCell?.row === row && selectedBoardCell?.col === col);
+                    const isDropTarget = !tile && (selectedTileId != null || selectedBoardCell != null || selectedBoardCellKeys.size > 0);
                     return /*#__PURE__*/(0, _reactJsxRuntime.jsx)(TouchableOpacity.default, {
                       activeOpacity: tile ? 0.75 : isDropTarget ? 0.6 : 1,
                       onPress: () => {
                         if (isPinching.current) return;
                         if (tile) {
                           onBoardTilePress(row, col);
-                        } else if (selectedTileId || selectedBoardCell) {
+                        } else if (selectedTileId || selectedBoardCell || selectedBoardCellKeys.size > 0) {
                           onCellPress(row, col);
                         }
                       },
