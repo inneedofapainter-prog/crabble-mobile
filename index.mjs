@@ -78218,6 +78218,14 @@ var app_default = app;
 // as the API/socket server, so Socket.io can connect at /api/socket.io.
 const __crabblePath = require("node:path");
 const __crabbleStaticDir = __crabblePath.join(__dirname, "mobile-web");
+app_default.use((req, res, next) => {
+  if (req.path === "/" || req.path.endsWith(".html") || req.path.startsWith("/_expo/")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
 app_default.use(import_express7.default.static(__crabbleStaticDir));
 app_default.use((req, res, next) => {
   if (req.path.startsWith("/api")) return next();
@@ -78580,28 +78588,6 @@ function applyAction(state, action) {
       );
       return { ...state, players };
     }
-    case "liftTiles": {
-      const player = state.players.find((p) => p.id === action.playerId);
-      if (!player) return state;
-      const pb = getPlayerBoard(player);
-      const newBoard = { ...pb.board };
-      const lifted = [];
-      const seen = new Set();
-      for (const cell of action.cells) {
-        const key = cellKey(cell.row, cell.col);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const tile = newBoard[key];
-        if (!tile) continue;
-        lifted.push(tile);
-        delete newBoard[key];
-      }
-      if (lifted.length === 0) return state;
-      const players = state.players.map(
-        (p) => p.id === action.playerId ? { ...p, hand: [...p.hand, ...lifted], board: newBoard } : p
-      );
-      return { ...state, players };
-    }
     case "moveBoardTile": {
       const actor = state.players.find((p) => p.id === action.actorId);
       if (!actor) return state;
@@ -78615,45 +78601,6 @@ function applyAction(state, action) {
       delete newBoard[fromKey];
       newBoard[toKey] = tile;
       const bounds = expandPlayerBounds(pb, action.toRow, action.toCol);
-      const players = state.players.map(
-        (p) => p.id === action.actorId ? { ...p, board: newBoard, ...bounds } : p
-      );
-      return { ...state, players };
-    }
-    case "moveBoardTiles": {
-      const actor = state.players.find((p) => p.id === action.actorId);
-      if (!actor) return state;
-      const pb = getPlayerBoard(actor);
-      if (action.cells.length === 0) return state;
-      const uniqueCells = Array.from(new Map(action.cells.map((cell) => [cellKey(cell.row, cell.col), cell])).values());
-      const selectedKeys = new Set(uniqueCells.map((cell) => cellKey(cell.row, cell.col)));
-      const movingTiles = uniqueCells.map((cell) => ({ ...cell, key: cellKey(cell.row, cell.col), tile: pb.board[cellKey(cell.row, cell.col)] }));
-      if (movingTiles.some((item) => !item.tile)) return state;
-      const minRow = Math.min(...uniqueCells.map((cell) => cell.row));
-      const minCol = Math.min(...uniqueCells.map((cell) => cell.col));
-      const rowOffset = action.toRow - minRow;
-      const colOffset = action.toCol - minCol;
-      const destinationKeys = new Set();
-      for (const item of movingTiles) {
-        const destKey = cellKey(item.row + rowOffset, item.col + colOffset);
-        if (destinationKeys.has(destKey)) return state;
-        destinationKeys.add(destKey);
-        if (pb.board[destKey] && !selectedKeys.has(destKey)) return state;
-      }
-      const newBoard = { ...pb.board };
-      for (const key of selectedKeys) delete newBoard[key];
-      let bounds = {
-        boardMinRow: actor.boardMinRow ?? initialBoardBounds.boardMinRow,
-        boardMaxRow: actor.boardMaxRow ?? initialBoardBounds.boardMaxRow,
-        boardMinCol: actor.boardMinCol ?? initialBoardBounds.boardMinCol,
-        boardMaxCol: actor.boardMaxCol ?? initialBoardBounds.boardMaxCol
-      };
-      for (const item of movingTiles) {
-        const newRow = item.row + rowOffset;
-        const newCol = item.col + colOffset;
-        newBoard[cellKey(newRow, newCol)] = item.tile;
-        bounds = expandPlayerBounds(bounds, newRow, newCol);
-      }
       const players = state.players.map(
         (p) => p.id === action.actorId ? { ...p, board: newBoard, ...bounds } : p
       );
@@ -79592,11 +79539,7 @@ function injectActorId(action, actorId) {
       return { ...action, actorId };
     case "liftTile":
       return { ...action, playerId: actorId };
-    case "liftTiles":
-      return { ...action, playerId: actorId };
     case "moveBoardTile":
-      return { ...action, actorId };
-    case "moveBoardTiles":
       return { ...action, actorId };
     case "assignBlankLetter":
       return { ...action, actorId };
