@@ -78482,8 +78482,7 @@ function crabbleIsDictionaryWord(word) {
   return CRABBLE_WORDS.includes(lower);
 }
 function crabbleCanCallGo(hand, board) {
-  const qStuck = hand.some((t) => t.letter === "Q") && !hand.some((t) => t.letter === "U") && !hand.some((t) => t.letter === "?");
-  if (hand.length > 0 && !qStuck) return false;
+  if (hand.length > 0) return false;
   if (Object.keys(board).length === 0) return false;
   const { words, orphanKeys } = crabbleExtractBoardWords(board);
   if (words.length === 0) return false;
@@ -78588,6 +78587,28 @@ function applyAction(state, action) {
       );
       return { ...state, players };
     }
+    case "liftTiles": {
+      const player = state.players.find((p) => p.id === action.playerId);
+      if (!player) return state;
+      const pb = getPlayerBoard(player);
+      const newBoard = { ...pb.board };
+      const lifted = [];
+      const seen = new Set();
+      for (const cell of action.cells) {
+        const key = cellKey(cell.row, cell.col);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const tile = newBoard[key];
+        if (!tile) continue;
+        lifted.push(tile);
+        delete newBoard[key];
+      }
+      if (lifted.length === 0) return state;
+      const players = state.players.map(
+        (p) => p.id === action.playerId ? { ...p, hand: [...p.hand, ...lifted], board: newBoard } : p
+      );
+      return { ...state, players };
+    }
     case "moveBoardTile": {
       const actor = state.players.find((p) => p.id === action.actorId);
       if (!actor) return state;
@@ -78601,6 +78622,45 @@ function applyAction(state, action) {
       delete newBoard[fromKey];
       newBoard[toKey] = tile;
       const bounds = expandPlayerBounds(pb, action.toRow, action.toCol);
+      const players = state.players.map(
+        (p) => p.id === action.actorId ? { ...p, board: newBoard, ...bounds } : p
+      );
+      return { ...state, players };
+    }
+    case "moveBoardTiles": {
+      const actor = state.players.find((p) => p.id === action.actorId);
+      if (!actor) return state;
+      const pb = getPlayerBoard(actor);
+      if (!action.cells || action.cells.length === 0) return state;
+      const uniqueCells = Array.from(new Map(action.cells.map((cell) => [cellKey(cell.row, cell.col), cell])).values());
+      const selectedKeys = new Set(uniqueCells.map((cell) => cellKey(cell.row, cell.col)));
+      const movingTiles = uniqueCells.map((cell) => ({ ...cell, key: cellKey(cell.row, cell.col), tile: pb.board[cellKey(cell.row, cell.col)] }));
+      if (movingTiles.some((item) => !item.tile)) return state;
+      const minRow = Math.min(...uniqueCells.map((cell) => cell.row));
+      const minCol = Math.min(...uniqueCells.map((cell) => cell.col));
+      const rowOffset = action.toRow - minRow;
+      const colOffset = action.toCol - minCol;
+      const destinationKeys = new Set();
+      for (const item of movingTiles) {
+        const destKey = cellKey(item.row + rowOffset, item.col + colOffset);
+        if (destinationKeys.has(destKey)) return state;
+        destinationKeys.add(destKey);
+        if (pb.board[destKey] && !selectedKeys.has(destKey)) return state;
+      }
+      const newBoard = { ...pb.board };
+      for (const key of selectedKeys) delete newBoard[key];
+      let bounds = {
+        boardMinRow: actor.boardMinRow ?? initialBoardBounds.boardMinRow,
+        boardMaxRow: actor.boardMaxRow ?? initialBoardBounds.boardMaxRow,
+        boardMinCol: actor.boardMinCol ?? initialBoardBounds.boardMinCol,
+        boardMaxCol: actor.boardMaxCol ?? initialBoardBounds.boardMaxCol
+      };
+      for (const item of movingTiles) {
+        const newRow = item.row + rowOffset;
+        const newCol = item.col + colOffset;
+        newBoard[cellKey(newRow, newCol)] = item.tile;
+        bounds = expandPlayerBounds(bounds, newRow, newCol);
+      }
       const players = state.players.map(
         (p) => p.id === action.actorId ? { ...p, board: newBoard, ...bounds } : p
       );
@@ -78991,6 +79051,23 @@ function broadcastRoomUpdate(io2, room) {
 var lobbyPresence = /* @__PURE__ */ new Map();
 var pendingChallenges = /* @__PURE__ */ new Map();
 var onlineStats = /* @__PURE__ */ new Map();
+var roomChatHistory = /* @__PURE__ */ new Map();
+var MAX_ROOM_CHAT_MESSAGES = 50;
+var MAX_CHAT_MESSAGE_LENGTH = 160;
+function cleanChatMessage(message) {
+  return String(message ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_CHAT_MESSAGE_LENGTH);
+}
+function getRoomChatHistory(roomCode) {
+  return roomChatHistory.get(roomCode) ?? [];
+}
+function addRoomChatMessage(roomCode, message) {
+  const next = [...getRoomChatHistory(roomCode), message].slice(-MAX_ROOM_CHAT_MESSAGES);
+  roomChatHistory.set(roomCode, next);
+  return next;
+}
+function emitRoomChatHistory(io2, socketId, roomCode) {
+  io2.to(socketId).emit("room:chat:history", { messages: getRoomChatHistory(roomCode) });
+}
 function normalizeLeaderboardName(name) {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -79399,6 +79476,7 @@ function setupSocketServer(httpServer2) {
           playerId: joinResult2.playerId,
           state: filterStateForPlayer(existingRoom.gameState, joinResult2.playerId)
         });
+        emitRoomChatHistory(io2, socket.id, existingRoom.code);
         broadcastRoomUpdate(io2, existingRoom);
         markRoomPlayersStatus(io2, existingRoom, "in-room");
         logger.info({ roomCode: existingRoom.code, challenger: challenger.name, target: targetName }, "Challenge accepted; player added to existing room");
@@ -79411,6 +79489,7 @@ function setupSocketServer(httpServer2) {
         playerId: hostPlayerId,
         state: filterStateForPlayer(room.gameState, hostPlayerId)
       });
+      emitRoomChatHistory(io2, challenge.fromSocketId, room.code);
       const joinResult = joinRoom(socket.id, room.code, targetName);
       if ("error" in joinResult) {
         socket.emit("game:error", { message: joinResult.error });
@@ -79422,6 +79501,7 @@ function setupSocketServer(httpServer2) {
         playerId: joinResult.playerId,
         state: filterStateForPlayer(room.gameState, joinResult.playerId)
       });
+      emitRoomChatHistory(io2, socket.id, room.code);
       broadcastRoomUpdate(io2, room);
       markRoomPlayersStatus(io2, room, "in-room");
       logger.info({ roomCode: room.code, challenger: challenger.name, target: targetName }, "Challenge accepted; room created");
@@ -79446,6 +79526,7 @@ function setupSocketServer(httpServer2) {
       socket.join(room.code);
       const filtered = filterStateForPlayer(room.gameState, playerId);
       socket.emit("room:created", { roomCode: room.code, playerId, state: filtered });
+      emitRoomChatHistory(io2, socket.id, room.code);
       markLobbyRoomStatus(io2, socket.id, "in-room", room.code);
       logger.info({ roomCode: room.code, playerName }, "Room created");
     });
@@ -79464,6 +79545,7 @@ function setupSocketServer(httpServer2) {
       socket.join(room.code);
       const filtered = filterStateForPlayer(room.gameState, playerId);
       socket.emit("room:joined", { roomCode: room.code, playerId, state: filtered });
+      emitRoomChatHistory(io2, socket.id, room.code);
       markLobbyRoomStatus(io2, socket.id, room.gameState.status === "playing" ? "playing" : "in-room", room.code);
       if (!reconnected) {
         broadcastRoomUpdate(io2, room);
@@ -79491,6 +79573,30 @@ function setupSocketServer(httpServer2) {
       markRoomPlayersStatus(io2, room, "playing");
       logger.info({ roomCode }, "Game started");
     });
+    socket.on("room:chat", ({ roomCode, message }) => {
+      const room = getRoom(roomCode);
+      if (!room) {
+        socket.emit("game:error", { message: "Room not found." });
+        return;
+      }
+      const roomPlayer = room.players.find((p) => p.socketId === socket.id && !p.disconnectedAt);
+      if (!roomPlayer) {
+        socket.emit("game:error", { message: "Not authorized." });
+        return;
+      }
+      const clean = cleanChatMessage(message);
+      if (!clean) return;
+      const chatMessage = {
+        id: crypto.randomUUID(),
+        playerId: roomPlayer.playerId,
+        playerName: roomPlayer.name,
+        message: clean,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      addRoomChatMessage(room.code, chatMessage);
+      io2.to(room.code).emit("room:chat:message", { message: chatMessage });
+    });
+
     socket.on("game:action", async ({ roomCode, action }) => {
       const room = getRoom(roomCode);
       if (!room) {
@@ -79539,7 +79645,11 @@ function injectActorId(action, actorId) {
       return { ...action, actorId };
     case "liftTile":
       return { ...action, playerId: actorId };
+    case "liftTiles":
+      return { ...action, playerId: actorId };
     case "moveBoardTile":
+      return { ...action, actorId };
+    case "moveBoardTiles":
       return { ...action, actorId };
     case "assignBlankLetter":
       return { ...action, actorId };
